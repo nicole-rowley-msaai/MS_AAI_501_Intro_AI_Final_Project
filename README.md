@@ -39,9 +39,23 @@ Choose a data set that does not require excessive data preprocessing. That said,
 
 ---
 
-**The report, in Word or PDF, should contain the following contents: **
+****The report, in Word or PDF, should contain the following contents: ****
 
-A description of the purpose, goals, and scope of your project. You should include references to papers you read on which your project and any algorithms you used are based. Include a discussion of whether you adapted a published algorithm or devised a new one, the range of problems and issues you addressed, and the relation of these problems and issues to the techniques and ideas covered in this course.
-A clear specification of the AI algorithms you used, with analysis, evaluation, and critique of the algorithm and your implementation. For algorithm comparison, it is preferred that empirical comparison results are presented graphically.
-An appendix that provides a list of each project participant and their detailed contributions to the project. 
-Your code should be clearly documented. Submit your code with the project report to Canvas (or GitHub link directly to a public repository in your report and Canvas). Remember that your project report serves as the tour guide for your readers to be able to repeat your project process and discover the same patterns as you did. Only one member of your team will need to submit the deliverables during this final project.
+## **Project Purpose & Context**
+
+* **Core Objectives:** Clearly define the purpose, goals, and overall scope of your project.
+* **Academic Grounding:** Include references to the papers or research that informed your project and algorithm choices.
+* **Originality & Connection:** Discuss whether you adapted an existing algorithm or devised a new one, and explain how your work relates to the concepts covered in this course.
+
+## **Technical Analysis**
+
+* **Algorithm Specification:** Provide a clear breakdown of the AI algorithms used, including an analysis, evaluation, and critique of both the logic and your specific implementation.
+* **Graphical Results:** Use charts and graphs to present your empirical comparisons between algorithms (this is the preferred method for the report).
+* **Reproducibility:** Write the report as a "tour guide" so readers can replicate your process and achieve the same results.
+
+## **Team & Code Requirements**
+
+* **Code Quality:** Submit clean, clearly documented source code via Canvas or a public GitHub link.
+* **Contributor Appendix:** Include an appendix listing each participant and a detailed breakdown of their specific contributions.
+* **Single Submission:** Only one team member needs to submit the final deliverables.
+
