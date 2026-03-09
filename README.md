@@ -3,7 +3,21 @@ AI and Machine Learning Problems and Datasets
 
 Experiment Design:
 
-Define a problem using a dataset (publicly available or self-provided) and describe it in terms of its real-world organizational or business application. The complexity level of the problem should be at least comparable to one of your assignments. The problem should use at least two different types of AI and machine learning algorithms that we have studied in this course, such as Classification, Clustering, and Regression, in an investigation of the analytics solution to the problem. This investigation must include some aspects of experimental comparison. Depending on the problem, you may choose to experiment with different types of algorithms, e.g., different types of classifiers, and some experiments with tuning parameters of the algorithms. Alternatively, if your problem is suitable, you may use multiple algorithms (Clustering + Classification, etc.). Note that if there are a larger number of attributes in your selected dataset, you can try some type of feature selection to reduce the number of attributes. You may use summary statistics and visualization techniques to help you explain your findings in this project.
+Here is a summary of the project requirements:
+
+## **Project Core Requirements**
+
+* **Problem Definition:** Identify a specific problem and describe its real-world application within a business or organizational context.
+* **Data Selection:** Use a dataset that is either publicly available (e.g., Kaggle, UCI) or provided by you.
+* **Technical Complexity:** The scope must be at least as complex as your previous course assignments.
+* **Algorithmic Breadth:** Implement at least **two different types** of AI/ML algorithms studied in class (e.g., Classification, Clustering, or Regression).
+* **Experimental Comparison:** Conduct a formal investigation that compares different approaches. This can include:
+* Comparing different types of the same algorithm (e.g., two different Classifiers).
+* Tuning hyperparameters to optimize performance.
+* Combining multiple techniques (e.g., using Clustering to inform a Classification model).
+* **Dimensionality Management:** If the dataset has many attributes, apply **feature selection** techniques to streamline the data.
+* **Analysis & Reporting:** Use **summary statistics** and **visualizations** to explain your methodology and findings.
+---
 
 Some rules/tips about choosing AI challenges and data sets for your final projects:
 
