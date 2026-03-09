@@ -14,17 +14,32 @@
 * **Analysis & Reporting:** Use **summary statistics** and **visualizations** to explain your methodology and findings.
 ---
 
-Some rules/tips about choosing AI challenges and data sets for your final projects:
+**Some rules/tips about choosing AI challenges and data sets for your final projects:**
 
 Do not choose the problems that we have already analyzed in the course.
 The dataset should not be small or made up. For this course, "small" is defined as fewer than 1000 examples in the dataset.
 Choose a data set that does not require excessive data preprocessing. That said, some data preprocessing is expected.
 
-Final Project Paper and Code:
+## **Submission Deliverables**
 
-You must submit a well-written report on your final project and the complete, well-documented, and clean source code by the end of Week 7. Your report (without Appendices), including text and selected tables/graphs, should be approximately 10 pages in length and describe the AI algorithms you implemented or deployed together with the data on which they were tested. Furthermore, you should include a detailed analysis of results or system performance (depending on the project's scope). Write and submit your final project report in APA 7 style, similar to (sample professional paper). 
+* **Final Report:** A well-written document describing your project, algorithms, and data.
+* **Source Code:** Must be complete, well-documented, and clean.
+* **Deadline:** Both components are due by the end of **Week 7**.
 
-The report, in Word or PDF, should contain the following contents: 
+## **Report Specifications**
+
+* **Length:** Approximately **10 pages** (excluding Appendices).
+* **Core Content:** * Description of the implemented/deployed AI algorithms.
+* Details of the dataset used for testing.
+* A detailed analysis of results or system performance.
+
+
+* **Formatting:** Must follow **APA 7 style** (consistent with a professional paper).
+* **Visuals:** Include relevant tables and graphs within the body of the report to support your analysis.
+
+---
+
+**The report, in Word or PDF, should contain the following contents: **
 
 A description of the purpose, goals, and scope of your project. You should include references to papers you read on which your project and any algorithms you used are based. Include a discussion of whether you adapted a published algorithm or devised a new one, the range of problems and issues you addressed, and the relation of these problems and issues to the techniques and ideas covered in this course.
 A clear specification of the AI algorithms you used, with analysis, evaluation, and critique of the algorithm and your implementation. For algorithm comparison, it is preferred that empirical comparison results are presented graphically.
