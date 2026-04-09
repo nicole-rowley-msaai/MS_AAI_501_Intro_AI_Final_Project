@@ -1,6 +1,7 @@
 # MS_AAI_501_Intro_AI_Final_Project
 
 **Introduction**
+
 Financial fraud remains a major challenge for banks and e-commerce platforms as digital
 transactions continue to grow. Fraud detection systems must identify rare fraudulent transactions
 among millions of legitimate purchases while minimizing disruptions for normal customers. A
@@ -10,6 +11,7 @@ machine learning approaches are increasingly used to identify patterns in large 
 datasets.
 
 **Objectives**
+
 This project proposes a hybrid machine learning pipeline using a dataset of
 approximately 550,000 transaction records. The system will combine supervised classification
 models and unsupervised anomaly detection to detect both known and emerging fraud patterns.
