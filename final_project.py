@@ -310,7 +310,7 @@ plt.show()
 
 print(f"\n{'#'*30}\nStarting Gradient Boosting Evaluation\n{'#'*30}")
 
-# Initialize a list to store GB results for a final comparison if desired
+# Initialize a list to store GB results
 gb_auprc_results = []
 
 for i, data in enumerate(subsets):
@@ -320,43 +320,48 @@ for i, data in enumerate(subsets):
     X_gb = data.drop('Class', axis=1)
     y_gb = data['Class']
 
-    # 80-20 Stratified Split (Matching your RF split logic)
+    # 80-20 Stratified Split
     X_train, X_test, y_train, y_test = train_test_split(
         X_gb, y_gb, test_size=0.20, random_state=42, stratify=y_gb
     )
 
-    # Scaling (Preventing Data Leakage by fitting only on Train)
+    # Scaling (Scaling 'Amount' based on training data)
     scaler = StandardScaler()
     X_train_scaled = X_train.copy()
     X_test_scaled = X_test.copy()
     X_train_scaled['Amount'] = scaler.fit_transform(X_train[['Amount']])
     X_test_scaled['Amount'] = scaler.transform(X_test[['Amount']])
 
-    # Train Gradient Boosting Classifier
-    # We use common defaults; max_depth is lower than RF to prevent overfitting
+    # Initialize and Train Gradient Boosting Classifier
     gbc = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
     gbc.fit(X_train_scaled, y_train)
 
-    # Get Binary Predictions and Probabilities
+    # Stratified Cross-Validation on the Training Data
+    # This checks if the model performance is stable across different folds of subset 3
+    print(f"Running 5-Fold Stratified CV...")
+    cv_auprc = cross_val_score(gbc, X_train_scaled, y_train, cv=skf, scoring='average_precision')
+    print(f"Mean CV AUPRC: {cv_auprc.mean():.4f} (+/- {cv_auprc.std():.4f})")
+
+    # Get Binary Predictions and Probabilities for Test Set
     y_pred_gb = gbc.predict(X_test_scaled)
     y_probs_gb = gbc.predict_proba(X_test_scaled)[:, 1] 
 
-    # Calculate Metrics 
+    # Calculate Test Metrics 
     auprc_gb = average_precision_score(y_test, y_probs_gb)
     gb_auprc_results.append(auprc_gb)
 
     # Print Results
     print(f"Total Test Samples: {len(y_test)} | Actual Fraud in Test: {y_test.sum()}")
-    print(f"AUPRC Score: {auprc_gb:.4f}")
+    print(f"Test AUPRC Score: {auprc_gb:.4f}")
 
     print("\nDetailed Classification Report:")
     print(classification_report(y_test, y_pred_gb, target_names=['Legitimate (0)', 'Fraud (1)']))
 
-    # Confusion Matrix Visualization with Seaborn Heatmap
+    # Confusion Matrix Visualization
     plt.figure(figsize=(5, 4))
     cm = confusion_matrix(y_test, y_pred_gb)
     sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', cbar=False)
-    plt.title(f'Gradient Boosting Confusion Matrix: {subset_names[i]}')
+    plt.title(f'GB Confusion Matrix: {subset_names[i]}')
     plt.ylabel('Actual Label')
     plt.xlabel('Predicted Label')
     plt.show()
@@ -369,7 +374,7 @@ print(f"\n{'#'*30}\nStarting Hyperparameter Tuning for Gradient Boosting\n{'#'*3
 X_tune = subset_3.drop('Class', axis=1)
 y_tune = subset_3['Class']
 
-# Prepare data for tuning (using same scaling logic)
+# Prepare data for tuning
 X_train_tune, _, y_train_tune, _ = train_test_split(X_tune, y_tune, test_size=0.20, random_state=42, stratify=y_tune)
 scaler_tune = StandardScaler()
 X_train_tune['Amount'] = scaler_tune.fit_transform(X_train_tune[['Amount']])
@@ -382,12 +387,12 @@ param_grid = {
     'subsample': [0.7, 1.0]
 }
 
-# Run Grid Search
+# Run Grid Search using Stratified K-Fold (skf)
 grid_search = GridSearchCV(
     estimator=GradientBoostingClassifier(random_state=42),
     param_grid=param_grid,
-    scoring='f1', 
-    cv=3,
+    scoring='average_precision', # Changed to average_precision to match AUPRC goals
+    cv=skf,                      # Now using the 5-fold Stratified object
     n_jobs=-1,
     verbose=1
 )
@@ -396,7 +401,7 @@ print("Tuning parameters on Subset 3...")
 grid_search.fit(X_train_tune, y_train_tune)
 
 print(f"Best parameters: {grid_search.best_params_}")
-print(f"Best CV F1 score: {grid_search.best_score_:.4f}")
+print(f"Best CV AUPRC score: {grid_search.best_score_:.4f}")
 
 # ---------------Feature Importance from Tuned Gradient Boosting---------------
 
@@ -411,3 +416,138 @@ plt.title("Gradient Boosting: Top 10 Predictive Features for Fraud")
 plt.ylabel("Importance Score")
 plt.xticks(rotation=45)
 plt.show()
+
+# ---------------K-Means Clustering Analysis---------------
+
+print(f"\n{'#'*30}\nStarting K-Means Clustering Analysis\n{'#'*30}")
+
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+
+# Use Subset 3 for consistency with large-scale analysis
+X_km = subset_3.drop('Class', axis=1)
+y_km = subset_3['Class']
+
+# Feature Scaling (K-Means is distance-based, so ALL features need scaling)
+scaler_km = StandardScaler()
+X_scaled_km = scaler_km.fit_transform(X_km)
+
+# Finding the Optimal K (Elbow Method)
+print("Calculating Elbow Method to find optimal clusters...")
+wcss = []
+for i in range(1, 11):
+    kmeans = KMeans(n_clusters=i, init='k-means++', random_state=42, n_init=10)
+    kmeans.fit(X_scaled_km)
+    wcss.append(kmeans.inertia_)
+
+plt.figure(figsize=(8, 5))
+plt.plot(range(1, 11), wcss, marker='o', linestyle='--')
+plt.title('Elbow Method for Optimal K')
+plt.xlabel('Number of Clusters')
+plt.ylabel('WCSS (Inertia)')
+plt.show()
+
+# Fit K-Means using K=2 to see if it naturally separates Fraud vs Legit)
+print("Fitting K-Means with K=2...")
+kmeans = KMeans(n_clusters=2, init='k-means++', random_state=42, n_init=10)
+clusters = kmeans.fit_predict(X_scaled_km)
+
+# Evaluate Cluster-to-Class Alignment - check if Cluster 0 or 1 contains the majority of fraud cases
+km_results = pd.DataFrame({'Actual_Class': y_km, 'Cluster': clusters})
+print("\nCluster vs. Actual Class Distribution:")
+print(pd.crosstab(km_results['Actual_Class'], km_results['Cluster']))
+
+# Visualization using PCA (Reducing 30 features to 2D for plotting)
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X_scaled_km)
+
+plt.figure(figsize=(12, 5))
+
+# Plot 1: Actual Classes
+plt.subplot(1, 2, 1)
+plt.scatter(X_pca[y_km == 0, 0], X_pca[y_km == 0, 1], c='seagreen', label='Legit', alpha=0.5, s=10)
+plt.scatter(X_pca[y_km == 1, 0], X_pca[y_km == 1, 1], c='salmon', label='Fraud', alpha=0.9, s=30)
+plt.title('Actual Fraud Labels (PCA-Reduced)')
+plt.legend()
+
+# Plot 2: K-Means Clusters
+plt.subplot(1, 2, 2)
+plt.scatter(X_pca[:, 0], X_pca[:, 1], c=clusters, cmap='viridis', alpha=0.5, s=10)
+plt.title('K-Means Cluster Assignments (K=2)')
+
+plt.tight_layout()
+plt.show()
+
+# ---------------GB with Cluster Distance Feature Engineering---------------
+
+print(f"\n{'#'*30}\nStarting Enhanced GB with Cluster Distance Engineering\n{'#'*30}")
+
+# Using Subset 3 for the final comparison
+X_eng = subset_3.drop('Class', axis=1)
+y_eng = subset_3['Class']
+
+# 80-20 Stratified Split
+X_train, X_test, y_train, y_test = train_test_split(
+    X_eng, y_eng, test_size=0.20, random_state=42, stratify=y_eng
+)
+
+# Full Feature Scaling (necessary for distance calculations)
+scaler_final = StandardScaler()
+X_train_scaled = pd.DataFrame(scaler_final.fit_transform(X_train), columns=X_train.columns)
+X_test_scaled = pd.DataFrame(scaler_final.transform(X_test), columns=X_test.columns)
+
+# Generate Cluster Distances (Unsupervised Learning))
+# We use K=8 to represent different "modes" of normal spending behavior
+kmeans_eng = KMeans(n_clusters=8, init='k-means++', random_state=42, n_init=10)
+kmeans_eng.fit(X_train_scaled)
+train_dist = kmeans_eng.transform(X_train_scaled)
+test_dist = kmeans_eng.transform(X_test_scaled)
+
+# Add distances as new features (Dist_0 to Dist_7)
+dist_cols = [f'Dist_C{i}' for i in range(8)]
+X_train_final = pd.concat([X_train_scaled, pd.DataFrame(train_dist, columns=dist_cols)], axis=1)
+X_test_final = pd.concat([X_test_scaled, pd.DataFrame(test_dist, columns=dist_cols)], axis=1)
+
+# Train Enhanced GB Model
+# Using the best parameters discovered from your earlier Grid Search
+gb_enhanced = GradientBoostingClassifier(
+    n_estimators=300, 
+    learning_rate=0.05, 
+    max_depth=4, 
+    subsample=0.7, 
+    random_state=42
+)
+gb_enhanced.fit(X_train_final, y_train)
+
+# Results
+y_probs_enhanced = gb_enhanced.predict_proba(X_test_final)[:, 1]
+auprc_enhanced = average_precision_score(y_test, y_probs_enhanced)
+print(f"Enhanced AUPRC (with Cluster Distances): {auprc_enhanced:.4f}")
+
+# ---------------Final Model Comparison---------------
+
+print(f"\n{'#'*30}\nFinal Model Comparison\n{'#'*30}")
+
+# Gather results (Assuming 'auprc' is from your RF and 'auprc_gb' is from standard GB)
+comparison_data = {
+    'Model': ['Random Forest', 'Standard GB', 'Enhanced GB (K-Means Dist)'],
+    'AUPRC Score': [auprc, gb_auprc_results[-1], auprc_enhanced]
+}
+
+df_compare = pd.DataFrame(comparison_data)
+
+# Visualization
+plt.figure(figsize=(10, 6))
+sns.barplot(data=df_compare, x='Model', y='AUPRC Score', palette='viridis')
+plt.ylim(df_compare['AUPRC Score'].min() - 0.05, 1.0) # Zoom in to see differences
+plt.title('Performance Comparison: Area Under Precision-Recall Curve')
+plt.ylabel('AUPRC (Higher is Better)')
+
+# Add value labels on top of bars
+for i, val in enumerate(df_compare['AUPRC Score']):
+    plt.text(i, val + 0.005, f'{val:.4f}', ha='center', fontweight='bold')
+
+plt.show()
+
+print("\nPerformance Summary Table:")
+print(df_compare)
