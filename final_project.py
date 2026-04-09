@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import classification_report, confusion_matrix, recall_score, precision_score, precision_recall_curve, average_precision_score, f1_score
 from sklearn.ensemble import GradientBoostingClassifier
-
+from sklearn.model_selection import GridSearchCV
 """
 Dependencies: pip3 install:
     kaggle, kagglehub, pandas, numpy, matplotlib, seaborn, scikit-learn
@@ -83,16 +83,6 @@ if 'id' in df_cc_fraud.columns:
 
 # Check Class Balance
 print(df_cc_fraud['Class'].value_counts(normalize=True))
-
-# Get descriptive statistics for Amount
-amount_summary = df_cc_fraud['Amount'].describe()
-
-print("--- Transaction Amount Range Summary ---")
-print(f"Minimum: ${amount_summary['min']:.2f}")
-print(f"Maximum: ${amount_summary['max']:.2f}")
-print(f"Median:  ${amount_summary['50%']:.2f}")
-print(f"Mean:    ${amount_summary['mean']:.2f}")
-print(f"Range:   ${amount_summary['max'] - amount_summary['min']:.2f}")
 
 # Summary Stats for Amount
 amount_summary = df_cc_fraud['Amount'].describe()
@@ -227,6 +217,9 @@ subset_1 = pd.concat([legit_subs[0], fraud_subs[0]]).sample(frac=1, random_state
 subset_2 = pd.concat([legit_subs[1], fraud_subs[1]]).sample(frac=1, random_state=42)
 subset_3 = pd.concat([legit_subs[2], fraud_subs[2]]).sample(frac=1, random_state=42)
 
+# Define the StratifiedKFold for later use in cross-validation
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
 # Verification
 subsets = [subset_1, subset_2, subset_3]
 
@@ -236,7 +229,6 @@ for i, sub in enumerate(subsets, 1):
     print(f"Subset {i} ({['1/6', '2/6', '3/6'][i-1]}): {len(sub)} rows | "
           f"Fraud Count: {fraud_count} | "
           f"Fraud %: {(fraud_count/len(sub))*100:.4f}%")
-    
 
 # ---------------Random Forest Model Training and Testing---------------
 
@@ -271,53 +263,47 @@ for i, data in enumerate(subsets):
     rf.fit(X_train_scaled, y_train)
 
     # Get Binary Predictions and Probabilities
-    y_pred = rf.predict(X_test_scaled)
-    y_probs = rf.predict_proba(X_test_scaled)[:, 1] # Probabilities for the 'Fraud' class
+    y_pred_rf = rf.predict(X_test_scaled)
+    y_probs_rf = rf.predict_proba(X_test_scaled)[:, 1] # Probabilities for the 'Fraud' class
 
     # Calculate Metrics
-    auprc = average_precision_score(y_test, y_probs)
+    auprc = average_precision_score(y_test, y_probs_rf)
 
     # Print RF Results
     print(f"Total Test Samples: {len(y_test)} | Actual Fraud in Test: {y_test.sum()}")
     print(f"AUPRC Score: {auprc:.4f}")
 
+    # Stratified Cross-Validation on the Training Data
+    # This checks if the model performance is stable across different folds of subset 3
+    print(f"Running 5-Fold Stratified CV...")
+    cv_auprc = cross_val_score(rf, X_train_scaled, y_train, cv=skf, scoring='average_precision')
+    print(f"Mean CV AUPRC Stability: {cv_auprc.mean():.4f} (+/- {cv_auprc.std():.4f})")
+
+    # Print Classification Report
     print("\nDetailed Classification Report:")
-    print(classification_report(y_test, y_pred, target_names=['Legitimate (0)', 'Fraud (1)']))
+    print(classification_report(y_test, y_pred_rf, target_names=['Legitimate (0)', 'Fraud (1)']))
 
     # Confusion Matrix Visualization with Seaborn Heatmap
     plt.figure(figsize=(5, 4))
-    cm = confusion_matrix(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred_rf)
     sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', cbar=False)
     plt.title(f'Random Forest Confusion Matrix: {subset_names[i]}')
     plt.ylabel('Actual Label')
     plt.xlabel('Predicted Label')
     plt.show()
 
-# ---------------Stratified Cross-Validation on Subset 3---------------
-
-# Define the Stratified Split
-skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
-# Re-prepare Subset 3 features/target
-X3 = subset_3.drop('Class', axis=1)
-y3 = subset_3['Class']
-
-# Run CV specifically for AUPRC (average_precision)
-cv_auprc = cross_val_score(rf, X3, y3, cv=skf, scoring='average_precision')
-
-print(f"Subset 3 AUPRC Stability: {cv_auprc.mean():.4f} (+/- {cv_auprc.std():.4f})")
-
 # ---------------Feature Importance from Random Forest Model---------------
 
-# Extract importance from trained Random Forest model
-importances = pd.Series(rf.feature_importances_, index=X_train.columns)
-importances = importances.sort_values(ascending=False)
+# Extract and store RF importance
+rf_importances = pd.Series(rf.feature_importances_, index=X_train.columns)
+rf_importances = rf_importances.sort_values(ascending=False)
 
-# Plot the top 10 features
-importances.head(10).plot(kind='barh', color='skyblue')
-plt.title("Feature Importance - Top 10")
-plt.xlabel("Importance")
-plt.ylabel("Feature")
+# Plot Random Forest Feature Importance
+plt.figure(figsize=(10, 6))
+rf_importances.head(10).plot(kind='bar', color='seagreen')
+plt.title("Random Forest: Top 10 Predictive Features for Fraud")
+plt.ylabel("Importance Score")
+plt.xticks(rotation=45)
 plt.show()
 
 # ---------------Gradient Boosting Model Training and Testing---------------
@@ -355,11 +341,11 @@ for i, data in enumerate(subsets):
     y_pred_gb = gbc.predict(X_test_scaled)
     y_probs_gb = gbc.predict_proba(X_test_scaled)[:, 1] 
 
-    # Calculate Metrics (Identical to your RF metrics)
+    # Calculate Metrics 
     auprc_gb = average_precision_score(y_test, y_probs_gb)
     gb_auprc_results.append(auprc_gb)
 
-    # Print Results in the same format as RF
+    # Print Results
     print(f"Total Test Samples: {len(y_test)} | Actual Fraud in Test: {y_test.sum()}")
     print(f"AUPRC Score: {auprc_gb:.4f}")
 
@@ -368,9 +354,60 @@ for i, data in enumerate(subsets):
 
     # Confusion Matrix Visualization with Seaborn Heatmap
     plt.figure(figsize=(5, 4))
-    cm = confusion_matrix(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred_gb)
     sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', cbar=False)
     plt.title(f'Gradient Boosting Confusion Matrix: {subset_names[i]}')
     plt.ylabel('Actual Label')
     plt.xlabel('Predicted Label')
     plt.show()
+
+# ---------------Gradient Boosting with Hyperparameter Tuning---------------
+
+print(f"\n{'#'*30}\nStarting Hyperparameter Tuning for Gradient Boosting\n{'#'*30}")
+
+# We will use Subset 3 for tuning as it has the most data
+X_tune = subset_3.drop('Class', axis=1)
+y_tune = subset_3['Class']
+
+# Prepare data for tuning (using same scaling logic)
+X_train_tune, _, y_train_tune, _ = train_test_split(X_tune, y_tune, test_size=0.20, random_state=42, stratify=y_tune)
+scaler_tune = StandardScaler()
+X_train_tune['Amount'] = scaler_tune.fit_transform(X_train_tune[['Amount']])
+
+# Define Grid
+param_grid = {
+    'learning_rate': [0.01, 0.05, 0.1],
+    'n_estimators': [100, 200, 300],
+    'max_depth': [2, 3, 4],
+    'subsample': [0.7, 1.0]
+}
+
+# Run Grid Search
+grid_search = GridSearchCV(
+    estimator=GradientBoostingClassifier(random_state=42),
+    param_grid=param_grid,
+    scoring='f1', 
+    cv=3,
+    n_jobs=-1,
+    verbose=1
+)
+
+print("Tuning parameters on Subset 3...")
+grid_search.fit(X_train_tune, y_train_tune)
+
+print(f"Best parameters: {grid_search.best_params_}")
+print(f"Best CV F1 score: {grid_search.best_score_:.4f}")
+
+# ---------------Feature Importance from Tuned Gradient Boosting---------------
+
+# Extract from the best estimator found by GridSearchCV
+gb_importances = pd.Series(grid_search.best_estimator_.feature_importances_, index=X_train.columns)
+gb_importances = gb_importances.sort_values(ascending=False)
+
+# Plot Gradient Boosting Feature Importance
+plt.figure(figsize=(10, 6))
+gb_importances.head(10).plot(kind='bar', color='royalblue')
+plt.title("Gradient Boosting: Top 10 Predictive Features for Fraud")
+plt.ylabel("Importance Score")
+plt.xticks(rotation=45)
+plt.show()
