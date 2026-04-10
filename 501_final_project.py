@@ -15,16 +15,15 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import classification_report, confusion_matrix, recall_score, precision_score, precision_recall_curve, average_precision_score, f1_score
 from sklearn.ensemble import GradientBoostingClassifier
-from imblearn.over_sampling import SMOTE
 from xgboost import XGBClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.ensemble import IsolationForest
-from imblearn.pipeline import Pipeline as ImbPipeline
+
 """
 Dependencies: pip3 install:
-    1. kaggle, kagglehub, pandas, numpy, matplotlib, seaborn, scikit-learn, openpyxl, imbalanced-learn, xgboost
+    1. kaggle, kagglehub, pandas, numpy, matplotlib, seaborn, scikit-learn, xgboost
     *** or install from requirements.txt ***
 
     2. brew install libomp  # For XGBoost on Mac
