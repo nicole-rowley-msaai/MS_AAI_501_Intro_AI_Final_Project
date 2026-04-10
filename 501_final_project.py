@@ -22,7 +22,7 @@ from sklearn.decomposition import PCA
 from sklearn.ensemble import IsolationForest
 
 """
-Dependencies: pip3 install:
+Dependencies - install:
     1. kaggle, kagglehub, pandas, numpy, matplotlib, seaborn, scikit-learn, xgboost
     *** or install from requirements.txt ***
 
