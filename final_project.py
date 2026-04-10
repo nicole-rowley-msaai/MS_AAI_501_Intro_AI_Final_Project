@@ -19,7 +19,7 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 """
 Dependencies: pip3 install:
-    kaggle, kagglehub, pandas, numpy, matplotlib, seaborn, scikit-learn
+    kaggle, kagglehub, pandas, numpy, matplotlib, seaborn, scikit-learn, openpyxl
     *** or install from requirements.txt ***
 
 Generate token key at https://www.kaggle.com/settings under user profile.
@@ -54,17 +54,22 @@ for zip_file in zip_files:
 
 print("\nDownload and extraction complete.")
 
-csv_file_path = os.path.join(download_path, 'creditcard_2023.csv') 
-df = pd.read_csv(csv_file_path, sep=None, engine='python') # Use sep=None to auto-detect the separator
+csv_file_path = os.path.join(download_path, 'creditcard_2023.csv')
+
+if os.path.exists(csv_file_path):
+    df_cc_fraud = pd.read_csv(csv_file_path)
+    print(f"Dataset loaded successfully from {csv_file_path}")
+else:
+    print(f"Error: {csv_file_path} not found. Check your download path.")
+
+df = pd.read_csv(csv_file_path, sep=None, engine='python')
 
 # ---------------Data Acquisition & Inspection---------------
 
 print(f"\n{'#'*30}\nStarting Data Acquisition & Inspection\n{'#'*30}")
 
+# Load Dataset and Inspect
 df_cc_fraud = df.copy() # Create a copy of the original dataframe for processing
-
-# Load into Pandas and Inspect
-df_cc_fraud = pd.read_csv('creditcard_2023.csv')  # adjust filename if needed
 print(f"\nOriginal Dataset Shape: {df_cc_fraud.shape}")
 print(df_cc_fraud.head())
 
@@ -117,7 +122,7 @@ plt.xlabel('Transaction Class')
 plt.ylabel('Amount ($)')
 plt.xticks([0, 1], ['Legit (0)', 'Fraud (1)'])
 
-plt.savefig("boxplots.svg", bbox_inches='tight', format='svg') # Exporting to SVG
+plt.savefig("boxplots.png", bbox_inches='tight', dpi=300) # Exporting to PNG
 
 plt.show()
 
@@ -164,7 +169,7 @@ for j in range(i + 1, len(axes)):
 
 plt.tight_layout()
 
-plt.savefig("histograms.svg", bbox_inches='tight', format='svg') # Exporting to SVG
+plt.savefig("histograms.png", bbox_inches='tight', dpi=300) # Exporting to PNG
 
 plt.show()
 
@@ -186,7 +191,7 @@ plt.xticks(rotation=90, fontsize=12)
 plt.yticks(rotation=0, fontsize=12)
 plt.tight_layout()
 
-plt.savefig("correlation_matrix.svg", bbox_inches='tight', format='svg') # Exporting to SVG
+plt.savefig("correlation_matrix.png", bbox_inches='tight', dpi=300) # Exporting to PNG
 
 plt.show()
 
@@ -272,22 +277,30 @@ for i, data in enumerate(subsets):
     rf = RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42, n_jobs=-1)
     rf.fit(X_train_scaled, y_train)
 
-    # Get Binary Predictions and Probabilities
+    # Preditions and Probabilities
     y_pred_rf = rf.predict(X_test_scaled)
     y_probs_rf = rf.predict_proba(X_test_scaled)[:, 1] # Probabilities for the 'Fraud' class
 
-    # Store Confusion Matrix for later visualization
+    # Store Confusion Matrix
     cm = confusion_matrix(y_test, y_pred_rf)
     cms.append(cm)
 
-    # Print RF Results
-    print(f"Total Test Samples: {len(y_test)} | Actual Fraud in Test: {y_test.sum()}")
+    # Calculate and print AUPRC Score
+    rf_auprc = average_precision_score(y_test, y_probs_rf) 
     print(f"AUPRC Score: {rf_auprc:.4f}")
 
-    # Stratified Cross-Validation on the Training Data
-    print(f"Running 5-Fold Stratified CV...")
-    rf_cv_auprc = cross_val_score(rf, X_train_scaled, y_train, cv=skf, scoring='average_precision')
-    print(f"Mean CV AUPRC Stability: {rf_cv_auprc.mean():.4f} (+/- {rf_cv_auprc.std():.4f})")
+    # Perform Stratified Cross-Validation only on subset 3
+    if i == 2:
+        print(f"Running 5-Fold Stratified CV on {subset_names[i]}...")
+        rf_cv_auprc = cross_val_score(rf, X_train_scaled, y_train, cv=skf, scoring='average_precision')
+        cv_mean = rf_cv_auprc.mean()
+        cv_std = rf_cv_auprc.std()
+        print(f"Mean CV AUPRC Stability: {cv_mean:.4f} (+/- {cv_std:.4f})")
+    else:
+        print(f"Skipping CV for {subset_names[i]}...")
+        # Initialize these as None so they exist for the dictionary below
+        cv_mean = None
+        cv_std = None
 
     report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
     all_results.append({
@@ -295,8 +308,8 @@ for i, data in enumerate(subsets):
         'Total Test Samples': len(y_test),
         'Actual Fraud': y_test.sum(),
         'AUPRC Score': rf_auprc,
-        'Mean CV AUPRC': rf_cv_auprc.mean(),
-        'CV Stability (Std)': rf_cv_auprc.std(),
+        'Mean CV AUPRC': cv_mean,      
+        'CV Stability (Std)': cv_std,  
         'Precision (Fraud)': report_rf['1']['precision'],
         'Recall (Fraud)': report_rf['1']['recall'],
         'F1-Score (Fraud)': report_rf['1']['f1-score']
@@ -316,8 +329,8 @@ for i, cm in enumerate(cms):
 plt.tight_layout() # Prevent overlapping
 
 # Save the final consolidated plot to SVG format
-final_filename = "rf_confusion_matrices.svg"
-plt.savefig(final_filename, format='svg', bbox_inches='tight')
+final_filename = "rf_confusion_matrices.png"
+plt.savefig(final_filename, bbox_inches='tight', dpi=300) # Exporting to PNG
 
 plt.show() # Display the consolidated plot
 
@@ -338,7 +351,7 @@ plt.title("Random Forest: Top 10 Predictive Features for Fraud")
 plt.ylabel("Importance Score")
 plt.xticks(rotation=45)
 
-plt.savefig("rf_feature_importance.svg", bbox_inches='tight', format='svg') # Exporting to SVG
+plt.savefig("rf_feature_importance.png", bbox_inches='tight', dpi=300) # Exporting to PNG
 
 plt.show()
 
@@ -349,7 +362,7 @@ print(f"\n{'#'*30}\nStarting Gradient Boosting Evaluation\n{'#'*30}")
 # Initialize a list to store GB results
 gb_auprc_results = []
 all_results_gb = []  # For Excel export
-cms_gb = []          # For side-by-side SVG plotting
+cms_gb = []          # For side-by-side PNG plotting
 
 for i, data in enumerate(subsets):
     print(f"\n{'='*20} GB: Evaluating {subset_names[i]} {'='*20}")
@@ -374,41 +387,47 @@ for i, data in enumerate(subsets):
     gbc = GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, max_depth=3, random_state=42)
     gbc.fit(X_train_scaled, y_train)
 
-    # Stratified Cross-Validation on the Training Data
-    # This checks if the model performance is stable across different folds of subset 3
-    print(f"Running 5-Fold Stratified CV...")
-    cv_auprc = cross_val_score(gbc, X_train_scaled, y_train, cv=skf, scoring='average_precision')
-    print(f"Mean CV AUPRC: {cv_auprc.mean():.4f} (+/- {cv_auprc.std():.4f})")
+    # Perform Stratified Cross-Validation only on subset 3
+    if i == 2:
+        print(f"Running 5-Fold Stratified CV on {subset_names[i]}...")
+        cv_scores = cross_val_score(gbc, X_train_scaled, y_train, cv=skf, scoring='average_precision')
+        cv_mean = cv_scores.mean()
+        cv_std = cv_scores.std()
+        print(f"Mean CV AUPRC: {cv_mean:.4f} (+/- {cv_std:.4f})")
+    else:
+        print(f"Skipping CV for {subset_names[i]}...")
+        cv_mean = None  # Or 0.0
+        cv_std = None   # Or 0.0
 
-    # Get Binary Predictions and Probabilities for Test Set
+    # Get Predictions
     y_pred_gb = gbc.predict(X_test_scaled)
     y_probs_gb = gbc.predict_proba(X_test_scaled)[:, 1] 
 
-    # Calculate Metrics 
+    # Calculate Test Metrics 
     gb_auprc = average_precision_score(y_test, y_probs_gb)
     gb_auprc_results.append(gb_auprc)
 
-    # Generate Confusion Matrix
+    # Confusion Matrix
     cm = confusion_matrix(y_test, y_pred_gb)
     cms_gb.append(cm)
 
-    # Gather Classification Report as dict for Excel
+    # Classification Report
     report_gb = classification_report(y_test, y_pred_gb, output_dict=True)
 
-    # Append to Results List for Excel Export
+    # Append to Results List
     all_results_gb.append({
         'Subset': subset_names[i],
         'Total Test Samples': len(y_test),
         'Actual Fraud': y_test.sum(),
         'AUPRC Score': gb_auprc,
-        'Mean CV AUPRC': cv_auprc.mean(),
-        'CV Stability (Std)': cv_auprc.std(),
+        'Mean CV AUPRC': cv_mean,      # Will be None for Subsets 1 & 2
+        'CV Stability (Std)': cv_std, # Will be None for Subsets 1 & 2
         'Precision (Fraud)': report_gb['1']['precision'],
         'Recall (Fraud)': report_gb['1']['recall'],
         'F1-Score (Fraud)': report_gb['1']['f1-score']
     })
 
-    print(f"AUPRC Score: {gb_auprc:.4f} | Mean CV: {cv_auprc.mean():.4f}")
+    print(f"Test AUPRC Score: {gb_auprc:.4f}")
 
 # Plot GB Confusion Matrices Side-by-Side
 fig, axes = plt.subplots(1, 3, figsize=(18, 5))
@@ -420,19 +439,19 @@ for i, cm in enumerate(cms_gb):
     axes[i].set_xlabel('Predicted Label')
 
 plt.tight_layout()
-final_plot_filename = "gb_confusion_matrices.svg"
-plt.savefig(final_plot_filename, format='svg', bbox_inches='tight')
+final_plot_filename = "gb_confusion_matrices.png"
+plt.savefig(final_plot_filename, bbox_inches='tight', dpi=300) # Exporting to PNG
 plt.show()
 
 # --- Export Results to Excel (Similar to RF) ---
 gb_metrics_df = pd.DataFrame(all_results_gb)
 gb_metrics_df.to_excel("gb_results.xlsx", index=False)
 
-# ---------------Gradient Boosting with Hyperparameter Tuning---------------
+# ---------------Gradient Boosting with Hyperparameter Optimization---------------
 
-print(f"\n{'#'*30}\nStarting Hyperparameter Tuning for Gradient Boosting\n{'#'*30}")
+print(f"\n{'#'*30}\nStarting Hyperparameter Optimization for Gradient Boosting\n{'#'*30}")
 
-# We will use Subset 3 for tuning as it has the most data
+# Use Subset 3 because it has the most data
 X_tune = subset_3.drop('Class', axis=1)
 y_tune = subset_3['Class']
 
@@ -459,7 +478,7 @@ grid_search = GridSearchCV(
     verbose=1
 )
 
-print("Tuning parameters on Subset 3...")
+print("Optimizing parameters on Subset 3...")
 grid_search.fit(X_train_tune, y_train_tune)
 
 print(f"Best parameters: {grid_search.best_params_}")
@@ -493,7 +512,7 @@ plt.title("Gradient Boosting: Top 10 Predictive Features for Fraud")
 plt.ylabel("Importance Score")
 plt.xticks(rotation=45)
 
-plt.savefig("gb_feature_importance_optimized.svg", bbox_inches='tight', format='svg') # Exporting to SVG
+plt.savefig("gb_feature_importance_optimized.png", bbox_inches='tight', dpi=300) # Exporting to PNG
 
 plt.show()
 
@@ -523,7 +542,7 @@ plt.title('Elbow Method for Optimal K')
 plt.xlabel('Number of Clusters')
 plt.ylabel('WCSS (Inertia)')
 
-plt.savefig('kmeans_elbow_plot.svg', format='svg') # Exporting to SVG
+plt.savefig('kmeans_elbow_plot.png', dpi=300) # Exporting to PNG
 
 plt.show()
 
@@ -564,7 +583,7 @@ plt.scatter(X_pca[:, 0], X_pca[:, 1], c=clusters, cmap='viridis', alpha=0.5, s=1
 plt.title('K-Means Cluster Assignments (K=2)')
 plt.tight_layout()
 
-plt.savefig('kmeans_pca_comparison.svg', format='svg') # Exporting to SVG
+plt.savefig('kmeans_pca_comparison.png', dpi=300) # Exporting to PNG
 
 plt.show()
 
@@ -625,7 +644,7 @@ plt.colorbar(scatter, label='Cluster ID')
 plt.title('Visualization of 8 K-Means Clusters (PCA-Reduced Space)')
 plt.xlabel('Principal Component 1')
 plt.ylabel('Principal Component 2')
-plt.savefig('cluster_modes_pca.svg', format='svg') # Exporting to SVG
+plt.savefig('cluster_modes_pca.png', dpi=300) # Exporting to PNG
 plt.show()
 
 # Feature Importance from the Enhanced GB Model (Including Cluster Distances)
@@ -637,7 +656,7 @@ feature_importances = pd.DataFrame({
 plt.figure(figsize=(10, 8))
 sns.barplot(x='Importance', y='Feature', data=feature_importances.head(15), palette='viridis')
 plt.title('Top 15 Features (Including Cluster Distances)')
-plt.savefig('feature_importance_hybrid.svg', format='svg') # Exporting to SVG
+plt.savefig('feature_importance_hybrid.png', dpi=300) # Exporting to PNG
 plt.show()
 
 # Save the Top 20 Feature Importances and the Final Model Metrics
@@ -650,7 +669,7 @@ with pd.ExcelWriter("hybrid_model_output.xlsx") as writer:
     feature_importances.to_excel(writer, sheet_name='Feature_Importances', index=False)
     metrics_df.to_excel(writer, sheet_name='Model_Summary', index=False)
 
-# ---------------Final Model Comparison---------------
+# ---------------Final Performance Metrics Comparison---------------
 
 print(f"\n{'#'*30}\nStarting Final Model Comparison\n{'#'*30}")
 
@@ -704,5 +723,6 @@ plt.title('Final Performance Comparison: AUPRC Score', fontsize=14)
 plt.ylim(df_compare['AUPRC Score'].min() - 0.05, 1.0)
 plt.ylabel('AUPRC (Higher is Better)')
 
-plt.savefig("final_model_comparison_plot.svg", format='svg', bbox_inches='tight')
+plt.savefig("final_model_comparison_plot.png", bbox_inches='tight', dpi=300)
+
 plt.show()
