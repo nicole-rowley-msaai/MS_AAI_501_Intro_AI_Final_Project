@@ -15,6 +15,8 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import classification_report, confusion_matrix, recall_score, precision_score, precision_recall_curve, average_precision_score, f1_score
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import GridSearchCV
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 """
 Dependencies: pip3 install:
     kaggle, kagglehub, pandas, numpy, matplotlib, seaborn, scikit-learn
@@ -93,6 +95,8 @@ print(f"Median:  ${amount_summary['50%']:.2f}")
 print(f"Mean:    ${amount_summary['mean']:.2f}")
 print(f"Range:   ${amount_summary['max'] - amount_summary['min']:.2f}")
 
+amount_summary.to_excel('amount_summary_table.xlsx') # Exporting to Excel
+
 # Define custom color mapping
 custom_colors = {0: "seagreen", 1: "salmon"}
 
@@ -112,6 +116,8 @@ plt.title('Transaction Amounts: Legit (0) vs. Fraud (1)')
 plt.xlabel('Transaction Class')
 plt.ylabel('Amount ($)')
 plt.xticks([0, 1], ['Legit (0)', 'Fraud (1)'])
+
+plt.savefig("boxplots.svg", bbox_inches='tight', format='svg') # Exporting to SVG
 
 plt.show()
 
@@ -157,6 +163,9 @@ for j in range(i + 1, len(axes)):
     axes[j].axis('off')
 
 plt.tight_layout()
+
+plt.savefig("histograms.svg", bbox_inches='tight', format='svg') # Exporting to SVG
+
 plt.show()
 
 # Create Heatmap of Features
@@ -175,8 +184,10 @@ sns.heatmap(corr_matrix, mask=mask, annot=True, cmap='coolwarm', vmin=-1, vmax=1
 plt.title('Correlation Matrix of All 30 Features', fontsize=20)
 plt.xticks(rotation=90, fontsize=12)
 plt.yticks(rotation=0, fontsize=12)
-
 plt.tight_layout()
+
+plt.savefig("correlation_matrix.svg", bbox_inches='tight', format='svg') # Exporting to SVG
+
 plt.show()
 
 # ---------------Data Preprocessing---------------
@@ -191,7 +202,7 @@ fraud_df = df_cc_fraud[df_cc_fraud['Class'] == 1]
 num_fraud_to_keep = int((0.002 * len(legit_df)) / 0.998)
 fraud_downsampled = fraud_df.sample(n=num_fraud_to_keep, random_state=42)
 
-# Safe-Split (Stratified Ratio Split: splits a single class dataframe into subsets based on ratios)
+# Safe-Split (Stratified Ratio Split: splits a single class DataFrame into subsets based on ratios)
 def stratified_ratio_split(df_class, ratios):
     ratios = np.array(ratios) / sum(ratios)  # Normalize
     df_class = df_class.sample(frac=1, random_state=42)  # Shuffle
@@ -220,8 +231,9 @@ subset_3 = pd.concat([legit_subs[2], fraud_subs[2]]).sample(frac=1, random_state
 # Define the StratifiedKFold for later use in cross-validation
 skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-# Verification
+# Create list of subsets and names
 subsets = [subset_1, subset_2, subset_3]
+subset_names = ["Subset 1 (1/6 size)", "Subset 2 (2/6 size)", "Subset 3 (3/6 size)"]
 
 print(f"\n---Subset Summaries---")
 for i, sub in enumerate(subsets, 1):
@@ -234,10 +246,8 @@ for i, sub in enumerate(subsets, 1):
 
 print(f"\n{'#'*30}\nStarting Random Forest Evaluation\n{'#'*30}")
 
-# Train and test random forest on the three subsets using an 80-20 split
-# Create list of subsets and names
-subsets = [subset_1, subset_2, subset_3]
-subset_names = ["Subset 1 (1/6 size)", "Subset 2 (2/6 size)", "Subset 3 (3/6 size)"]
+all_results = []
+cms = []
 
 for i, data in enumerate(subsets):
     print(f"\n{'='*20} Evaluating {subset_names[i]} {'='*20}")
@@ -266,31 +276,54 @@ for i, data in enumerate(subsets):
     y_pred_rf = rf.predict(X_test_scaled)
     y_probs_rf = rf.predict_proba(X_test_scaled)[:, 1] # Probabilities for the 'Fraud' class
 
-    # Calculate Metrics
-    auprc = average_precision_score(y_test, y_probs_rf)
+    # Store Confusion Matrix for later visualization
+    cm = confusion_matrix(y_test, y_pred_rf)
+    cms.append(cm)
 
     # Print RF Results
     print(f"Total Test Samples: {len(y_test)} | Actual Fraud in Test: {y_test.sum()}")
-    print(f"AUPRC Score: {auprc:.4f}")
+    print(f"AUPRC Score: {rf_auprc:.4f}")
 
     # Stratified Cross-Validation on the Training Data
-    # This checks if the model performance is stable across different folds of subset 3
     print(f"Running 5-Fold Stratified CV...")
-    cv_auprc = cross_val_score(rf, X_train_scaled, y_train, cv=skf, scoring='average_precision')
-    print(f"Mean CV AUPRC Stability: {cv_auprc.mean():.4f} (+/- {cv_auprc.std():.4f})")
+    rf_cv_auprc = cross_val_score(rf, X_train_scaled, y_train, cv=skf, scoring='average_precision')
+    print(f"Mean CV AUPRC Stability: {rf_cv_auprc.mean():.4f} (+/- {rf_cv_auprc.std():.4f})")
 
-    # Print Classification Report
-    print("\nDetailed Classification Report:")
-    print(classification_report(y_test, y_pred_rf, target_names=['Legitimate (0)', 'Fraud (1)']))
+    report_rf = classification_report(y_test, y_pred_rf, output_dict=True)
+    all_results.append({
+        'Subset': subset_names[i],
+        'Total Test Samples': len(y_test),
+        'Actual Fraud': y_test.sum(),
+        'AUPRC Score': rf_auprc,
+        'Mean CV AUPRC': rf_cv_auprc.mean(),
+        'CV Stability (Std)': rf_cv_auprc.std(),
+        'Precision (Fraud)': report_rf['1']['precision'],
+        'Recall (Fraud)': report_rf['1']['recall'],
+        'F1-Score (Fraud)': report_rf['1']['f1-score']
+    })
 
-    # Confusion Matrix Visualization with Seaborn Heatmap
-    plt.figure(figsize=(5, 4))
-    cm = confusion_matrix(y_test, y_pred_rf)
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', cbar=False)
-    plt.title(f'Random Forest Confusion Matrix: {subset_names[i]}')
-    plt.ylabel('Actual Label')
-    plt.xlabel('Predicted Label')
-    plt.show()
+# Plot RF Confusion Matrices Side-by-Side
+fig, axes = plt.subplots(1, 3, figsize=(15, 5)) # Create 1 row, 3 columns
+
+for i, cm in enumerate(cms):
+    ax = axes[i]
+    # Remove cbar=False to get color bars for comparison
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', ax=ax)
+    ax.set_title(f'RF Matrix: {subset_names[i]}')
+    ax.set_ylabel('Actual Label')
+    ax.set_xlabel('Predicted Label')
+
+plt.tight_layout() # Prevent overlapping
+
+# Save the final consolidated plot to SVG format
+final_filename = "rf_confusion_matrices.svg"
+plt.savefig(final_filename, format='svg', bbox_inches='tight')
+
+plt.show() # Display the consolidated plot
+
+# Save Numeric Results to Excel 
+rf_metrics = pd.DataFrame(all_results)
+rf_metrics.to_excel("rf_results.xlsx", index=False)
 
 # ---------------Feature Importance from Random Forest Model---------------
 
@@ -304,6 +337,9 @@ rf_importances.head(10).plot(kind='bar', color='seagreen')
 plt.title("Random Forest: Top 10 Predictive Features for Fraud")
 plt.ylabel("Importance Score")
 plt.xticks(rotation=45)
+
+plt.savefig("rf_feature_importance.svg", bbox_inches='tight', format='svg') # Exporting to SVG
+
 plt.show()
 
 # ---------------Gradient Boosting Model Training and Testing---------------
@@ -312,6 +348,8 @@ print(f"\n{'#'*30}\nStarting Gradient Boosting Evaluation\n{'#'*30}")
 
 # Initialize a list to store GB results
 gb_auprc_results = []
+all_results_gb = []  # For Excel export
+cms_gb = []          # For side-by-side SVG plotting
 
 for i, data in enumerate(subsets):
     print(f"\n{'='*20} GB: Evaluating {subset_names[i]} {'='*20}")
@@ -346,25 +384,49 @@ for i, data in enumerate(subsets):
     y_pred_gb = gbc.predict(X_test_scaled)
     y_probs_gb = gbc.predict_proba(X_test_scaled)[:, 1] 
 
-    # Calculate Test Metrics 
-    auprc_gb = average_precision_score(y_test, y_probs_gb)
-    gb_auprc_results.append(auprc_gb)
+    # Calculate Metrics 
+    gb_auprc = average_precision_score(y_test, y_probs_gb)
+    gb_auprc_results.append(gb_auprc)
 
-    # Print Results
-    print(f"Total Test Samples: {len(y_test)} | Actual Fraud in Test: {y_test.sum()}")
-    print(f"Test AUPRC Score: {auprc_gb:.4f}")
-
-    print("\nDetailed Classification Report:")
-    print(classification_report(y_test, y_pred_gb, target_names=['Legitimate (0)', 'Fraud (1)']))
-
-    # Confusion Matrix Visualization
-    plt.figure(figsize=(5, 4))
+    # Generate Confusion Matrix
     cm = confusion_matrix(y_test, y_pred_gb)
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', cbar=False)
-    plt.title(f'GB Confusion Matrix: {subset_names[i]}')
-    plt.ylabel('Actual Label')
-    plt.xlabel('Predicted Label')
-    plt.show()
+    cms_gb.append(cm)
+
+    # Gather Classification Report as dict for Excel
+    report_gb = classification_report(y_test, y_pred_gb, output_dict=True)
+
+    # Append to Results List for Excel Export
+    all_results_gb.append({
+        'Subset': subset_names[i],
+        'Total Test Samples': len(y_test),
+        'Actual Fraud': y_test.sum(),
+        'AUPRC Score': gb_auprc,
+        'Mean CV AUPRC': cv_auprc.mean(),
+        'CV Stability (Std)': cv_auprc.std(),
+        'Precision (Fraud)': report_gb['1']['precision'],
+        'Recall (Fraud)': report_gb['1']['recall'],
+        'F1-Score (Fraud)': report_gb['1']['f1-score']
+    })
+
+    print(f"AUPRC Score: {gb_auprc:.4f} | Mean CV: {cv_auprc.mean():.4f}")
+
+# Plot GB Confusion Matrices Side-by-Side
+fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+for i, cm in enumerate(cms_gb):
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Greens', cbar=False, ax=axes[i])
+    axes[i].set_title(f'GB Confusion Matrix: {subset_names[i]}')
+    axes[i].set_ylabel('Actual Label')
+    axes[i].set_xlabel('Predicted Label')
+
+plt.tight_layout()
+final_plot_filename = "gb_confusion_matrices.svg"
+plt.savefig(final_plot_filename, format='svg', bbox_inches='tight')
+plt.show()
+
+# --- Export Results to Excel (Similar to RF) ---
+gb_metrics_df = pd.DataFrame(all_results_gb)
+gb_metrics_df.to_excel("gb_results.xlsx", index=False)
 
 # ---------------Gradient Boosting with Hyperparameter Tuning---------------
 
@@ -403,7 +465,22 @@ grid_search.fit(X_train_tune, y_train_tune)
 print(f"Best parameters: {grid_search.best_params_}")
 print(f"Best CV AUPRC score: {grid_search.best_score_:.4f}")
 
-# ---------------Feature Importance from Tuned Gradient Boosting---------------
+# Convert to DataFrame and Export to Excel
+tuning_results = pd.DataFrame(grid_search.cv_results_)
+
+# Sort results by rank (best performers at the top)
+tuning_results = tuning_results.sort_values(by='rank_test_score')
+
+# Select and reorder columns for clarity
+cols_to_keep = ['rank_test_score', 'mean_test_score', 'std_test_score'] + \
+               [col for col in tuning_results.columns if col.startswith('param_')]
+
+final_table = tuning_results[cols_to_keep]
+
+filename = "hyperparameter_tuning_results.xlsx" # Exporting to Excel
+final_table.to_excel(filename, index=False)
+
+# ---------------Feature Importance from Optimized Gradient Boosting---------------
 
 # Extract from the best estimator found by GridSearchCV
 gb_importances = pd.Series(grid_search.best_estimator_.feature_importances_, index=X_train.columns)
@@ -415,14 +492,14 @@ gb_importances.head(10).plot(kind='bar', color='royalblue')
 plt.title("Gradient Boosting: Top 10 Predictive Features for Fraud")
 plt.ylabel("Importance Score")
 plt.xticks(rotation=45)
+
+plt.savefig("gb_feature_importance_optimized.svg", bbox_inches='tight', format='svg') # Exporting to SVG
+
 plt.show()
 
 # ---------------K-Means Clustering Analysis---------------
 
 print(f"\n{'#'*30}\nStarting K-Means Clustering Analysis\n{'#'*30}")
-
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
 
 # Use Subset 3 for consistency with large-scale analysis
 X_km = subset_3.drop('Class', axis=1)
@@ -445,6 +522,9 @@ plt.plot(range(1, 11), wcss, marker='o', linestyle='--')
 plt.title('Elbow Method for Optimal K')
 plt.xlabel('Number of Clusters')
 plt.ylabel('WCSS (Inertia)')
+
+plt.savefig('kmeans_elbow_plot.svg', format='svg') # Exporting to SVG
+
 plt.show()
 
 # Fit K-Means using K=2 to see if it naturally separates Fraud vs Legit)
@@ -456,6 +536,14 @@ clusters = kmeans.fit_predict(X_scaled_km)
 km_results = pd.DataFrame({'Actual_Class': y_km, 'Cluster': clusters})
 print("\nCluster vs. Actual Class Distribution:")
 print(pd.crosstab(km_results['Actual_Class'], km_results['Cluster']))
+
+# Save Cluster vs. Actual Class Distribution to Excel
+km_results = pd.DataFrame({'Actual_Class': y_km, 'Cluster': clusters})
+cross_tab = pd.crosstab(km_results['Actual_Class'], km_results['Cluster'], 
+                        margins=True, margins_name="Total")
+
+# Exporting the crosstab to Excel
+cross_tab.to_excel("kmeans_class_distribution.xlsx") # Exporting to Excel
 
 # Visualization using PCA (Reducing 30 features to 2D for plotting)
 pca = PCA(n_components=2)
@@ -474,11 +562,13 @@ plt.legend()
 plt.subplot(1, 2, 2)
 plt.scatter(X_pca[:, 0], X_pca[:, 1], c=clusters, cmap='viridis', alpha=0.5, s=10)
 plt.title('K-Means Cluster Assignments (K=2)')
-
 plt.tight_layout()
+
+plt.savefig('kmeans_pca_comparison.svg', format='svg') # Exporting to SVG
+
 plt.show()
 
-# ---------------GB with Cluster Distance Feature Engineering---------------
+# ---------------Hybrid Model: Gradient Boosting with K-Means Feature Engineering---------------
 
 print(f"\n{'#'*30}\nStarting Enhanced GB with Cluster Distance Engineering\n{'#'*30}")
 
@@ -508,7 +598,7 @@ dist_cols = [f'Dist_C{i}' for i in range(8)]
 X_train_final = pd.concat([X_train_scaled, pd.DataFrame(train_dist, columns=dist_cols)], axis=1)
 X_test_final = pd.concat([X_test_scaled, pd.DataFrame(test_dist, columns=dist_cols)], axis=1)
 
-# Train Enhanced GB Model
+# Train Hybrid GB Model
 # Using the best parameters discovered from your earlier Grid Search
 gb_enhanced = GradientBoostingClassifier(
     n_estimators=300, 
@@ -524,30 +614,95 @@ y_probs_enhanced = gb_enhanced.predict_proba(X_test_final)[:, 1]
 auprc_enhanced = average_precision_score(y_test, y_probs_enhanced)
 print(f"Enhanced AUPRC (with Cluster Distances): {auprc_enhanced:.4f}")
 
+# PCA of the 8 Clusters
+pca_2d = PCA(n_components=2)
+X_pca = pca_2d.fit_transform(X_train_scaled)
+train_clusters = kmeans_eng.predict(X_train_scaled)
+
+plt.figure(figsize=(10, 6))
+scatter = plt.scatter(X_pca[:, 0], X_pca[:, 1], c=train_clusters, cmap='tab10', alpha=0.6, s=10)
+plt.colorbar(scatter, label='Cluster ID')
+plt.title('Visualization of 8 K-Means Clusters (PCA-Reduced Space)')
+plt.xlabel('Principal Component 1')
+plt.ylabel('Principal Component 2')
+plt.savefig('cluster_modes_pca.svg', format='svg') # Exporting to SVG
+plt.show()
+
+# Feature Importance from the Enhanced GB Model (Including Cluster Distances)
+feature_importances = pd.DataFrame({
+    'Feature': X_train_final.columns,
+    'Importance': gb_enhanced.feature_importances_
+}).sort_values(by='Importance', ascending=False)
+
+plt.figure(figsize=(10, 8))
+sns.barplot(x='Importance', y='Feature', data=feature_importances.head(15), palette='viridis')
+plt.title('Top 15 Features (Including Cluster Distances)')
+plt.savefig('feature_importance_hybrid.svg', format='svg') # Exporting to SVG
+plt.show()
+
+# Save the Top 20 Feature Importances and the Final Model Metrics
+metrics_df = pd.DataFrame({
+    'Metric': ['Hybrid AUPRC', 'Number of Clusters', 'Total Features'],
+    'Value': [auprc_enhanced, 8, len(X_train_final.columns)]
+})
+
+with pd.ExcelWriter("hybrid_model_output.xlsx") as writer:
+    feature_importances.to_excel(writer, sheet_name='Feature_Importances', index=False)
+    metrics_df.to_excel(writer, sheet_name='Model_Summary', index=False)
+
 # ---------------Final Model Comparison---------------
 
-print(f"\n{'#'*30}\nFinal Model Comparison\n{'#'*30}")
+print(f"\n{'#'*30}\nStarting Final Model Comparison\n{'#'*30}")
 
-# Gather results (Assuming 'auprc' is from your RF and 'auprc_gb' is from standard GB)
+# Extract results for Subset 3 (the largest data subset) for comparison
+rf_final = rf_metrics[rf_metrics['Subset'] == "Subset 3 (3/6 size)"].iloc[0]
+gb_final = gb_metrics_df[gb_metrics_df['Subset'] == "Subset 3 (3/6 size)"].iloc[0]
+
 comparison_data = {
-    'Model': ['Random Forest', 'Standard GB', 'Enhanced GB (K-Means Dist)'],
-    'AUPRC Score': [auprc, gb_auprc_results[-1], auprc_enhanced]
+    'Model Architecture': [
+        'Random Forest (Baseline)', 
+        'Gradient Boosting (Standard)', 
+        'Hybrid GB (K-Means Distances)'
+    ],
+    'AUPRC Score': [
+        rf_final['AUPRC Score'], 
+        gb_final['AUPRC Score'], 
+        auprc_enhanced
+    ],
+    'Mean CV AUPRC': [
+        rf_final['Mean CV AUPRC'], 
+        gb_final['Mean CV AUPRC'], 
+        grid_search.best_score_  # From the tuning section
+    ]
 }
 
 df_compare = pd.DataFrame(comparison_data)
 
+# Calculate Improvement vs Baseline
+baseline_score = df_compare.loc[0, 'AUPRC Score']
+df_compare['Improvement (%)'] = ((df_compare['AUPRC Score'] - baseline_score) / baseline_score) * 100
+
+# Save Comparison to Excel
+df_compare.to_excel("final_model_performance_comparison.xlsx", index=False)
+print("\nFinal comparison table saved to final_model_performance_comparison.xlsx")
+
 # Visualization
 plt.figure(figsize=(10, 6))
-sns.barplot(data=df_compare, x='Model', y='AUPRC Score', palette='viridis')
-plt.ylim(df_compare['AUPRC Score'].min() - 0.05, 1.0) # Zoom in to see differences
-plt.title('Performance Comparison: Area Under Precision-Recall Curve')
+sns.set_theme(style="whitegrid")
+ax = sns.barplot(data=df_compare, x='Model Architecture', y='AUPRC Score', palette='mako')
+
+# Add values on top of bars
+for p in ax.patches:
+    ax.annotate(f'{p.get_height():.4f}', 
+                (p.get_x() + p.get_width() / 2., p.get_height()), 
+                ha = 'center', va = 'center', 
+                xytext = (0, 9), 
+                textcoords = 'offset points',
+                fontweight='bold')
+
+plt.title('Final Performance Comparison: AUPRC Score', fontsize=14)
+plt.ylim(df_compare['AUPRC Score'].min() - 0.05, 1.0)
 plt.ylabel('AUPRC (Higher is Better)')
 
-# Add value labels on top of bars
-for i, val in enumerate(df_compare['AUPRC Score']):
-    plt.text(i, val + 0.005, f'{val:.4f}', ha='center', fontweight='bold')
-
+plt.savefig("final_model_comparison_plot.svg", format='svg', bbox_inches='tight')
 plt.show()
-
-print("\nPerformance Summary Table:")
-print(df_compare)
