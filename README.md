@@ -13,7 +13,7 @@ datasets.
 **Objectives**
 
 This project proposes a hybrid machine learning pipeline using a dataset of
-approximately 550,000 transaction records. The system will combine supervised classification
+568,630 transaction records. The system will combine supervised classification
 models and unsupervised anomaly detection to detect both known and emerging fraud patterns.
 The supervised component will compare Random Forest and Gradient Boosting classifiers to
 predict the probability that a transaction is fraudulent. These ensemble models are well suited to
